@@ -22,6 +22,18 @@ vehicles <- read_csv(here::here("Data", "vehicles.csv"),
 ```
 
 Describe what is happening in the `col_types` parameter. Why do you think this is necessary?
+```{r}
+glimpse(vehicles)
+```
+
+This command changes the default type from a "read N rows and guess" to a default type of characters for all data. 
+
+Setting a default character data type has two purposes:
+1. Faster read-in of data by pre-specifying rather than taking cpu time to partially read columns and guess.
+2. Coercing all data to characters preserves the original content and saves having to specify for each column manually, which would be tedious with a familiar data set and quite problematic with an unfamiliar one. Setting the data type to the lowest in the hierarchy prevents mistaken reading in of columns as an incompatible data type. For example, if there are many leading 0s, a column with doubles like `range` might attempt to read in as an integer value, a character column like `tCharger` could be misread as logical, or a column with many leading null values like `evMotor` may not be able to detect a data type at all.
+
+
+
 
 2. Create a reduced version of the dataset that includes the following fields:
 
@@ -42,7 +54,25 @@ Ensure that the `year`, fuelCost08`, `highway08`, `city08`, and `feScore` fields
 Assign this to a new dataframe called `vehicles_sub`.
 
 ```{r}
-
+vehicles_sub <- vehicles %>%
+  mutate(               # coerce data type to double & overwrite
+        year = as.double(year),
+        fuelCost08 = as.double(fuelCost08),
+        highway08 = as.double(highway08),
+        city08 = as.double(city08)
+  ) %>%
+  select(make, 
+        model, 
+        year,        
+        cylinders,
+        drive,
+        trany,
+        evMotor,
+        fuelCost08,  
+        highway08,   
+        city08,      
+        feScore
+    )
 ```
 
 3. Conduct an exploratory analysis of each field in the dataset. This should include:
@@ -56,16 +86,27 @@ Indicate anything interesting that you notice.
 *Hint: When finding counts of fields, sometimes it is helpful to sort the field from highest to lowest values.*
 
 ```{r}
-
+glimpse(vehicles_sub)
 ```
 
 
 ```{r}
-
+# summarize unique counts of each character field and the year, e.g. x entries from 1985 or 582 5-speed transmissions
+vehicles_sub %>% count(make)
+vehicles_sub %>% count(model)
+vehicles_sub %>% count(year)
+vehicles_sub %>% count(cylinders)
+vehicles_sub %>% count(drive)
+vehicles_sub %>% count(trany)
+vehicles_sub %>% count(evMotor)
+vehicles_sub %>% count(feScore)
 ```
 
 ```{r}
-
+# summarize stats data for numeric fields (fuelCost08, highway08, city08)
+summary(vehicles_sub$fuelCost08)
+summary(vehicles_sub$highway08)
+summary(vehicles_sub$city08)
 ```
 
 4. Some of the fields need to be cleaned to ease analysis. 
@@ -73,21 +114,65 @@ Indicate anything interesting that you notice.
 - Create a new field in `vehicles_sub` called `evMotor_flag` that indicates whether or not the vehicle has an electric motor.
 
 ```{r}
-
+mutate(vehicles_sub, 
+       evMotor_NA = is.na(evMotor),    # is evMotor blank/NA?
+       evMotor_flag = evMotor_NA == F  # does vehicle have evMotor?
+       )
 ```
 
 
 5. Create a graph that demonstrates how median city mileage has changed over time.
 
 ```{r}
-
+# summarize data: median city mileage (city08) by year
+vehicles_sub %>%
+  group_by(year) %>%
+  summarise(city08_median = median(city08)) %>%
+  ungroup() %>%
+# make plot of summarized data - line seems most clear
+ggplot(aes(x = year,
+           y = city08_median)) + 
+  geom_line() + 
+  
+  coord_cartesian(
+    xlim = NULL,            # show all X vals
+    ylim = c(14, 23),        # expand Y axis
+    expand = TRUE,
+    default = FALSE,
+    clip = "on"
+    )
 ```
+Median city mileage was between 16 and 18 mpg from 1984 to 2010, but has been on an upward trend fr model years from 2011 to 2022.
+
 
 6. Consider the top 5 car makes whose fuel economies have been evaluated most frequently. Create a graph that demonstrates how the city fuel mileage has changed over time for these makes.
 
 ```{r}
+# Summarize data by car make
+# Define top 5 make as a named subset
+make_top5 <- 
+  vehicles_sub %>% 
+  count(make, sort = TRUE) %>%
+  filter(n > 2210)      # value of n between 5th & 6th rank
 
+# filter to top 5 make subset
+# Summarize filtered data by car, make, and city08
+vehicles_sub %>% 
+  filter(make == make_top5$make) %>%    # specify vector in tibble
+  group_by(year, make) %>%
+  summarise(city_top5 = median(city08)) %>%
+  ungroup() %>%
+  
+# plot filtered data set -- overlaid lines
+ggplot(aes(x = year,
+           y = city_top5,
+           color = make
+           )) + 
+  geom_line()  
+  
 ```
+Of these 5 manufacturers, Toyota has consistently had the highest median city gas mileage. The four US manufacturers have lower medians, very similar to one another. As in the overall data, the city mileage was roughtly flat from 1984 to 2010 and has generally increased from 2011 to the present.
+
 
 7. Create a question about the dataset that must be solved by using the `dplyr` verbs - `select`, `mutate`, `summarize`, `arrange`, etc.
 
@@ -95,8 +180,71 @@ Indicate anything interesting that you notice.
 -   Create a graph that assists in answering the question.
 -   Write a short interpretation of the graph in order to answer your question.
 
+Q. How does mileage differ between gasoline and electric/hybrid vehicles for the top 5 manufacturers?
+
+```{r}
+# repeat filter/assign in new code chunk; did not carry from previous.
+make_top5 <-  
+  vehicles_sub %>% 
+  count(make, sort = TRUE) %>%
+  filter(n > 2210)
+
+vehicles_sub %>% 
+  mutate(vehicles_sub, 
+       evMotor_NA = is.na(evMotor),    # is evMotor blank/NA?
+       evMotor_flag = evMotor_NA == F  # does vehicle have evMotor?
+       ) %>%
+  filter(make == make_top5$make) %>%    # specify vector in tibble
+  group_by(year, make, evMotor_flag) %>%
+  summarise(city_top5 = median(city08)) %>%
+  ungroup() %>%
+  
+# plot filtered data set -- overlaid lines
+ggplot(aes(x = year,
+           y = city_top5,
+           color = make
+           )) + 
+  geom_line() +
+  facet_grid( ~ evMotor_flag)
+
+```
+The first EVs from these manufacturers were on the market for model year 2000 -- probably the very first Toyota Prius.  Initial median mileage was quite high, but also varies significantly by year of evaluation. This is probably due to several factors, including a) a mixture of hybrid and fully electric vehicles having the evMotor designation, and b) increased sample size/higher quality data with increasing adoption.
+
+Overall, median EV mileage is greater than for combustion-only vehicles. However, GMC's brief effort looks like a notable exception, with EV mileage comparable to its traditional vehicles and decreasing rather than increasing over the 7-year span evaluated.
+
+Q2. How has overall EV adoption changed over time?
+```{r}
+vehicles_sub %>% 
+  mutate(vehicles_sub, 
+       evMotor_NA = is.na(evMotor),    # is evMotor blank/NA?
+       evMotor_flag = evMotor_NA == F  # does vehicle have evMotor?
+       ) %>%
+  filter(evMotor_flag == T) %>%
+  group_by(year) %>%
+  count(evMotor_flag, name = "ev_count") %>%
+  ungroup() %>%
+  
+# plot filtered data set -- overlaid lines
+ggplot(aes(x = year,
+           y = ev_count,
+           )) + 
+  geom_line()
+
+```
+The number of EVs evaluated was flat 1998-2003, increased slowly from 2004 to 2010, and has taken off for model years 2011-2021. The number of evaluations is lower for 2022 model year; however, these vehicles are only recently on the market and data are likely still being collected.
+
+
 8. Submit the following information about the project you would like to solve for your course project:
 
 *   The dataset(s) you will be utilizing to perform your analysis. This may be Slacked or emailed to me separately from this document. You may include a direct link to the dataset, a file, the API you intend to extract the data from, or the 
 *   The business question that you intend to answer through your analysis.
 *   A high level description of how you intend to answer the proposed business question.
+
+Dataset: National Endowment for Humanities grant data
+https://catalog.data.gov/organization/neh-gov
+Data sets are in uniformly formatted files representing one decade each, from 1967-2021.
+
+Business question: Who are grants awarded to and in what fields? How do award amounts compare to amounts dispensed, and what factors might impact this result?
+
+Approach: 
+Concatenate data from 1970-2021. Summarize organization type, award amounts, and disciplines by year; create a suitable visualization. Show overall distribution of award amounts by decade. Compare award authorization (outright + match) to amount dispensed (outright + match + supplement); possibly best evaluated as percent of initial authorization due to wide range of dollar amounts. What percent of awards are on, below, and above initial authorization? Do these ratios change over time? Where amount dispensed is different from authorization (filter), do they trend with other data within the table (incomplete grant cycle for recent data, poor match generation, or supplemental awards)? Communicate results of these explorations with suitable visualizations.
